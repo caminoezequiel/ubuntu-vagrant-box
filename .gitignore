@@ -1,0 +1,12 @@
+# Inputs and build outputs
+*.iso
+*.box
+output-*/
+packer_cache/
+crash.log
+
+# Vagrant
+.vagrant/
+
+# IDE
+.idea/

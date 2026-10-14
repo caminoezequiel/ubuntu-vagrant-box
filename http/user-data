@@ -1,0 +1,21 @@
+#cloud-config
+autoinstall:
+  version: 1
+  locale: en_US.UTF-8
+  keyboard:
+    layout: us
+  identity:
+    hostname: ubuntu-vagrant
+    username: vagrant
+    # SHA-512 crypt hash of 'vagrant' (generate with: openssl passwd -6 vagrant)
+    password: "$6$NQ7u115f92jWj.HJ$.E8Mpu4hCFs7KYXTD9zW3oKNPgN19h2RipsmQK5cF1RSWQsFgslwfJW2ItBz93iPm5E97KA3oF3voXuxmcI0w1"
+  ssh:
+    install-server: true
+    allow-pw: true
+  storage:
+    layout:
+      name: direct
+  late-commands:
+    # Vagrant requires passwordless sudo for the vagrant user
+    - echo 'vagrant ALL=(ALL) NOPASSWD:ALL' > /target/etc/sudoers.d/vagrant
+    - chmod 440 /target/etc/sudoers.d/vagrant
