@@ -11,33 +11,9 @@ packer {
   }
 }
 
-variable "ubuntu_version" {
+variable "iso_url" {
   type        = string
-  default     = "26.04.1"
-  description = "Ubuntu point release of the live-server ISO."
-}
-
-variable "iso_checksum" {
-  type        = string
-  default     = "sha256:cc8a95cde20f6ced61a322420de00f10cc3c90ced545daa46cb9c1a117f1d927"
-  description = "Checksum of the ISO, from https://releases.ubuntu.com/<version>/SHA256SUMS."
-}
-
-variable "cpus" {
-  type    = number
-  default = 2
-}
-
-variable "memory" {
-  type        = number
-  default     = 4096
-  description = "Build VM memory in MB. Vagrantfiles set their own."
-}
-
-variable "disk_size" {
-  type        = number
-  default     = 20480
-  description = "Disk size in MB."
+  description = "Path or URL of an Ubuntu live-server or desktop ISO."
 }
 
 variable "headless" {
@@ -47,51 +23,46 @@ variable "headless" {
 }
 
 locals {
-  iso_name = "ubuntu-${var.ubuntu_version}-live-server-amd64.iso"
-  # x.y of the point release, e.g. 26.04
-  box_version = join(".", slice(split(".", var.ubuntu_version), 0, 2))
+  # ubuntu-26.04.1-live-server-amd64.iso -> ubuntu-26.04.1-server-amd64
+  box_name = replace(trimsuffix(basename(var.iso_url), ".iso"), "-live-", "-")
 }
 
 source "virtualbox-iso" "ubuntu" {
-  # Give the GRUB menu time to load before typing
-  boot_wait = "10s"
+  iso_url       = var.iso_url
+  iso_checksum  = "none"
+  guest_os_type = "Ubuntu_64"
+  headless      = var.headless
 
-  # Edit the default GRUB entry and append autoinstall args to the `linux` line.
+  # Dynamically allocated, so unused space costs nothing; the desktop installer wants the room
+  disk_size            = 40960
+  hard_drive_interface = "sata"
+
+  # Give the GRUB menu time to load, then edit the default entry and append autoinstall
+  # args to its `linux` line (same layout on the server and desktop ISOs).
   # GRUB needs `\;` (HCL "\\;"), otherwise `;` is taken as a command separator.
+  boot_wait = "10s"
   boot_command = [
     "<wait>e<wait>",
     "<down><down><down><end>",
     " autoinstall ds=nocloud\\;s=http://{{ .HTTPIP }}:{{ .HTTPPort }}/",
     "<F10>"
   ]
-
-  guest_os_type = "Ubuntu_64"
-  # A copy of the ISO in the project root is used if present, otherwise it is downloaded
-  iso_urls = [
-    local.iso_name,
-    "https://releases.ubuntu.com/${var.ubuntu_version}/${local.iso_name}"
-  ]
-  iso_checksum         = var.iso_checksum
-  http_directory       = "http"
-  disk_size            = var.disk_size
-  hard_drive_interface = "sata"
-  headless             = var.headless
+  http_directory = "http"
 
   ssh_username = "vagrant"
   ssh_password = "vagrant"
-  ssh_timeout  = "30m"
-  # The live installer runs its own sshd, which rejects vagrant/vagrant; keep retrying until the installed system is up
+  ssh_timeout  = "60m"
+  # The live server installer runs its own sshd, which rejects vagrant/vagrant; keep retrying until the installed system is up
   ssh_handshake_attempts = 1000
+  shutdown_command       = "sudo shutdown -P now"
 
-  shutdown_command = "sudo shutdown -P now"
-
-  # Guest utilities come from Ubuntu's packages instead (see scripts/vagrant.sh)
+  # Guest utilities come from Ubuntu's packages instead (see provision.sh)
   guest_additions_mode = "disable"
 
+  # Exported into the box; the display settings only matter for a desktop
   vboxmanage = [
-    ["modifyvm", "{{.Name}}", "--memory", "${var.memory}"],
-    ["modifyvm", "{{.Name}}", "--cpus", "${var.cpus}"],
-    ["modifyvm", "{{.Name}}", "--nic1", "nat"]
+    ["modifyvm", "{{.Name}}", "--memory", "4096", "--cpus", "2", "--nic1", "nat"],
+    ["modifyvm", "{{.Name}}", "--graphicscontroller", "vmsvga", "--vram", "128", "--clipboard-mode", "bidirectional"]
   ]
 }
 
@@ -100,13 +71,10 @@ build {
 
   provisioner "shell" {
     execute_command = "sudo -E bash '{{ .Path }}'"
-    scripts = [
-      "scripts/vagrant.sh",
-      "scripts/cleanup.sh"
-    ]
+    script          = "provision.sh"
   }
 
   post-processor "vagrant" {
-    output = "ubuntu-${local.box_version}-server-amd64-{{ .Provider }}.box"
+    output = "${local.box_name}.box"
   }
 }

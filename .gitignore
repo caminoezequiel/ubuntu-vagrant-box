@@ -4,6 +4,9 @@
 output-*/
 packer_cache/
 crash.log
+# Local build settings; vars.auto.pkrvars.hcl holds the committed defaults
+*.auto.pkrvars.hcl
+!vars.auto.pkrvars.hcl
 
 # Vagrant
 .vagrant/
